@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PP19A42 Live Schematic — Interactive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#23201a;
+    --paper:#faf7ee;
+    --hot:#e02418;
+    --gnd:#0c9c44;
+    --amber:#cf8a00;
+  }
+  *{box-sizing:border-box;-webkit-user-select:none;user-select:none}
+  body{
+    margin:0;
+    background:#cfc8b6;
+    background-image:radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px);
+    background-size:5px 5px;
+    font-family:'Oswald',Arial Narrow,Arial,sans-serif;
+    color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;
+    padding:18px 10px 60px;
+  }
+  .sheet{
+    background:var(--paper);
+    box-shadow:0 10px 35px rgba(40,30,10,.45), 0 2px 6px rgba(40,30,10,.3);
+    max-width:980px;width:100%;
+    padding:26px 30px 18px;
+    position:relative;
+  }
+  .sheet::after{ /* faint paper grain */
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.05;
+    background-image:repeating-linear-gradient(0deg,#000 0 1px,transparent 1px 3px),
+                     repeating-linear-gradient(90deg,#000 0 1px,transparent 1px 4px);
+    mix-blend-mode:multiply;
+  }
+  h1{
+    font-size:17px;font-weight:600;letter-spacing:.5px;margin:0;line-height:1.25;
+    text-transform:uppercase;
+  }
+  h1 small{font-weight:500}
+  .livebadge{
+    display:inline-block;background:var(--hot);color:#fff;font-size:11px;
+    padding:1px 8px;border-radius:2px;letter-spacing:2px;vertical-align:middle;margin-left:10px;
+    animation:badge 2.2s infinite;
+  }
+  @keyframes badge{0%,100%{opacity:1}50%{opacity:.55}}
+  #bar{
+    margin:12px 0 6px;border:1.5px solid var(--ink);background:#181611;color:#e8e2d2;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;
+    display:flex;align-items:center;gap:14px;padding:7px 12px;flex-wrap:wrap;
+  }
+  #engPill{
+    font-weight:600;padding:2px 10px;border-radius:2px;letter-spacing:1px;white-space:nowrap;
+    background:#555;color:#fff;
+  }
+  #engPill.e-crank{background:var(--amber);animation:badge .5s infinite}
+  #engPill.e-run{background:var(--gnd)}
+  #msg{flex:1;min-width:220px}
+  .chips{display:flex;gap:12px;font-size:10px;align-items:center;white-space:nowrap}
+  .chip::before{content:"";display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:5px;vertical-align:middle}
+  .chip.c-hot::before{border-color:var(--hot)} .chip.c-gnd::before{border-color:var(--gnd)} .chip.c-off::before{border-color:#888}
+  .hint{font-size:10.5px;letter-spacing:.6px;color:#6b6353;margin:2px 0 8px;font-weight:500}
+  svg{width:100%;height:auto;display:block}
+  svg text{pointer-events:none}
+
+  /* ---- schematic ink ---- */
+  .ink{stroke:var(--ink);fill:none;stroke-width:1.4}
+  .dashbox{stroke:var(--ink);fill:none;stroke-width:1.1;stroke-dasharray:5 4}
+  .lbl{font-size:9px;fill:var(--ink);text-anchor:middle;letter-spacing:.4px}
+  .tas{text-anchor:start !important}
+  .lbl.big{font-size:10.5px;font-weight:600}
+  .lbl.tiny{font-size:6.7px;fill:#5d564a}
+  .lbl.state{font-size:8px;font-weight:600}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .colorlbl{font-size:6.5px;fill:#6f675a;text-anchor:middle;letter-spacing:.5px}
+
+  .wire{stroke:var(--ink);stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round;transition:stroke .12s}
+  .wire.hot{stroke:var(--hot);stroke-width:2.6;filter:drop-shadow(0 0 2.5px rgba(224,36,24,.8))}
+  .wire.gnd{stroke:var(--gnd);stroke-width:2.3;filter:drop-shadow(0 0 2.5px rgba(12,156,68,.7))}
+  .wire.fault{stroke:#ff9100;stroke-width:2.6;stroke-dasharray:7 4}
+  .wirehit{stroke:transparent;stroke-width:11;fill:none;pointer-events:stroke}
+  .dot{fill:var(--ink)} .dot.hot{fill:var(--hot)} .dot.gnd{fill:var(--gnd)} .dot.fault{fill:#ff9100}
+  .pin{fill:var(--paper);stroke:var(--ink);stroke-width:1.5}
+  .pin.hot{stroke:var(--hot)} .pin.gnd{stroke:var(--gnd)} .pin.fault{stroke:#ff9100}
+  .lever{stroke:var(--ink);stroke-width:2.3;stroke-linecap:round;fill:none;transition:transform .18s ease}
+  .lever.hot{stroke:var(--hot);filter:drop-shadow(0 0 2px rgba(224,36,24,.8))}
+  .lever.gnd{stroke:var(--gnd);filter:drop-shadow(0 0 2px rgba(12,156,68,.7))}
+  .link{stroke:var(--ink);stroke-width:2;stroke-linecap:round}
+  .link.hot{stroke:var(--hot)} .link.gnd{stroke:var(--gnd)} .link.fault{stroke:#ff9100}
+
+  g.click{cursor:pointer}
+  g.click .hit{fill:transparent}
+  g.click:hover .dashbox,g.click:hover .ink.frame{stroke:var(--amber);stroke-width:1.8}
+  g.click:hover .lbl.state{fill:var(--amber)}
+
+  /* animations */
+  #crankRing{opacity:0}
+  svg.crank #crankRing{opacity:1;animation:spin .5s linear infinite;transform-origin:700px 170px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .sparkbolt{opacity:0;stroke:#ff7a00;stroke-width:1.6;fill:none}
+  svg.running .sparkbolt{animation:flick .32s infinite}
+  @keyframes flick{0%,100%{opacity:0}45%,60%{opacity:1}}
+  .lampglow{opacity:0;transition:opacity .25s}
+  .lamps-on .lampglow{opacity:1}
+  .lamps-on .lampface{fill:#ffe87a}
+  .lampface{fill:var(--paper);transition:fill .25s}
+  #solPlunger{transition:transform .15s}
+  #solPlunger.closed{transform:translateY(9px)}
+  #fuelNeedle{transition:transform .25s}
+  #fuelNeedle.open{transform:translateY(-7px)}
+  #dialKnob{transition:transform .2s}
+  .posrow{cursor:pointer}
+  .posrow:hover rect{fill:#efe7cf}
+  .rowhl{fill:#f3d98e}
+  .dialbtn{cursor:pointer}
+  .dialbtn circle{fill:transparent}
+  .dialbtn:hover text{fill:var(--amber)}
+
+  #tooltip{
+    position:fixed;display:none;z-index:50;pointer-events:none;
+    background:#181611;color:#f3eedd;font-family:'IBM Plex Mono',monospace;
+    font-size:11px;padding:5px 9px;border:1px solid #6f675a;max-width:300px;line-height:1.45;
+  }
+  #tooltip b{color:#ffd34d}
+  .foot{font-size:9.5px;color:#6b6353;text-align:center;margin-top:6px;letter-spacing:1px}
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1>TRACTOR — MODEL NUMBER PP19A42 (96046007700), PRODUCT NO. 960 46 00-77<br>
+  <small>SCHEMATIC</small><span class="livebadge">LIVE</span></h1>
+
+  <div id="bar">
+    <span id="engPill">ENGINE OFF</span>
+    <span id="msg">Key is OFF — magneto grounded through M+G.</span>
+    <span class="chips">
+      <span class="chip c-hot">POWERED</span>
+      <span class="chip c-gnd">GROUNDED</span>
+      <span class="chip c-off">NO VOLTAGE</span>
+    </span>
+  </div>
+  <div class="hint">CLICK ANY DEVICE TO TOGGLE IT (FUSE, SWITCHES, SEAT, PEDAL, BLADES, REVERSE, LIGHTS) &nbsp;·&nbsp; CLICK <b>START</b> ON THE KEY TO CRANK (KEY STAYS IN START — CLICK RUN ONCE THE ENGINE CATCHES) &nbsp;·&nbsp; HOVER ANY WIRE FOR A VOLTAGE READOUT</div>
+
+  <svg id="schem" viewBox="0 0 880 1160" xmlns="http://www.w3.org/2000/svg">
+    <!-- page frame -->
+    <rect x="40" y="30" width="812" height="1112" class="ink" stroke-width="1.2"/>
+    <text x="58" y="48" class="lbl tiny tas">SCH11 — INTERACTIVE</text>
+
+    <g id="wires"></g>
+    <g id="dots"></g>
+    <g id="pins"></g>
+    <g id="wlabels"></g>
+
+    <!-- ============ BATTERY ============ -->
+    <g id="battery">
+      <line x1="408" y1="85"  x2="408" y2="109" class="ink" stroke-width="2.2"/>
+      <line x1="420" y1="92"  x2="420" y2="102" class="ink"/>
+      <line x1="432" y1="85"  x2="432" y2="109" class="ink" stroke-width="2.2"/>
+      <line x1="444" y1="92"  x2="444" y2="102" class="ink"/>
+      <line x1="456" y1="85"  x2="456" y2="109" class="ink" stroke-width="2.2"/>
+      <text x="402" y="80" class="lbl big">+</text>
+      <text x="462" y="80" class="lbl big">−</text>
+      <text x="432" y="124" class="lbl">BATTERY</text>
+    </g>
+
+    <!-- ============ AMMETER ============ -->
+    <circle cx="165" cy="170" r="13" class="ink"/>
+    <text x="165" y="174" class="lbl big">A</text>
+    <text x="165" y="196" class="lbl">AMMETER</text>
+    <text x="165" y="206" class="lbl tiny">(OPTIONAL)</text>
+
+    <!-- ============ FUSE (clickable) ============ -->
+    <g id="fuseG" class="click">
+      <rect x="224" y="156" width="52" height="28" class="hit"/>
+      <rect x="228" y="162" width="44" height="16" class="ink frame"/>
+      <path id="fuseWave" d="M232,170 q5,-7 10,0 t10,0 t10,0 t8,0" class="wire" data-net="MAIN"/>
+      <g id="fuseBroken" style="display:none">
+        <path d="M232,170 l11,0 l5,-6" class="ink" stroke-width="1.8"/>
+        <path d="M268,170 l-11,0 l-4,6" class="ink" stroke-width="1.8"/>
+        <path d="M246,160 l3,5 l-4,3 l3,5" class="ink" stroke="#cf8a00" stroke-width="1.3"/>
+      </g>
+      <text x="250" y="152" class="lbl">FUSE</text>
+      <text id="subFuse" x="250" y="192" class="lbl state">OK — CLICK TO BLOW</text>
+    </g>
+
+    <!-- ============ SOLENOID ============ -->
+    <g id="solenoid">
+      <rect x="490" y="140" width="110" height="95" class="dashbox"/>
+      <text x="545" y="133" class="lbl">SOLENOID</text>
+      <line id="solPlunger" x1="507" y1="157" x2="573" y2="157" class="lever" data-net="ST"/>
+      <line x1="505" y1="165" x2="505" y2="175" class="ink"/>
+      <line x1="575" y1="165" x2="575" y2="175" class="ink"/>
+      <path d="M518,212 l6,-8 l8,16 l8,-16 l8,16 l8,-16 l8,16 l8,-16 l8,16 l6,-8 l6,0" transform="translate(-6,0)" class="ink" stroke-width="1.3"/>
+      <text x="545" y="231" class="lbl tiny">COIL</text>
+    </g>
+
+    <!-- ============ STARTER ============ -->
+    <circle id="crankRing" cx="700" cy="170" r="23" class="ink" stroke="#cf8a00" stroke-width="2.5" stroke-dasharray="9 7"/>
+    <circle cx="700" cy="170" r="16" class="ink" stroke-width="1.7"/>
+    <text x="700" y="175" class="lbl big">M</text>
+    <text x="700" y="142" class="lbl">STARTER</text>
+
+    <!-- ============ IGNITION SWITCH CLUSTER ============ -->
+    <g id="ignSw">
+      <circle cx="300" cy="300" r="48" class="ink" stroke-width="1.2"/>
+      <g id="ignLinks"></g>
+      <text x="300" y="245" class="lbl state">B</text>
+      <text x="343" y="261" class="lbl state">S</text>
+      <text x="359" y="303" class="lbl state">M</text>
+      <text x="347" y="338" class="lbl state">A1</text>
+      <text x="326" y="356" class="lbl state">A2</text>
+      <text x="300" y="361" class="lbl state">L</text>
+      <text x="256" y="345" class="lbl state">G</text>
+      <text x="248" y="265" class="lbl tiny">IGNITION</text>
+      <text x="248" y="274" class="lbl tiny">SWITCH</text>
+    </g>
+
+    <!-- ============ CHASSIS HARNESS BOUNDARY ============ -->
+    <rect x="452" y="246" width="374" height="404" class="dashbox" stroke-dasharray="9 6" opacity=".75"/>
+    <text x="510" y="643" class="lbl tiny" style="font-size:8px">CHASSIS HARNESS</text>
+
+    <!-- ============ CLUTCH / BRAKE (clickable) ============ -->
+    <g id="cbG" class="click">
+      <rect x="488" y="255" width="120" height="130" class="hit"/>
+      <rect x="488" y="255" width="120" height="130" class="dashbox"/>
+      <text x="548" y="310" class="lbl">CLUTCH/BRAKE</text>
+      <text id="capCB" x="548" y="322" class="lbl state">(PEDAL UP)</text>
+    </g>
+
+    <!-- ============ ATTACHMENT CLUTCH (clickable) ============ -->
+    <g id="acG" class="click">
+      <rect x="660" y="255" width="130" height="75" class="hit"/>
+      <rect x="660" y="255" width="130" height="75" class="dashbox"/>
+      <text x="725" y="344" class="lbl">ATTACHMENT CLUTCH</text>
+      <text id="capAC" x="725" y="356" class="lbl state">(CLUTCH OFF)</text>
+    </g>
+
+    <!-- ============ JUNCTION CONNECTOR ============ -->
+    <rect x="540" y="398" width="40" height="115" class="dashbox"/>
+    <text x="548" y="414" class="lbl tiny">3</text>
+    <text x="548" y="449" class="lbl tiny">2</text>
+    <text x="548" y="499" class="lbl tiny">1</text>
+    <text x="560" y="528" class="lbl tiny" style="font-size:7.5px">JUNCTION CONNECTOR</text>
+
+    <!-- ============ REVERSE SWITCH (clickable) ============ -->
+    <g id="revG" class="click">
+      <rect x="630" y="425" width="170" height="63" class="hit"/>
+      <rect x="630" y="425" width="170" height="63" class="dashbox"/>
+      <text x="727" y="468" class="lbl">REVERSE SWITCH</text>
+      <text id="capREV" x="727" y="480" class="lbl state">(NOT IN REVERSE)</text>
+    </g>
+
+    <!-- ============ SEAT SWITCH (clickable) ============ -->
+    <g id="seatG" class="click">
+      <rect x="660" y="492" width="146" height="68" class="hit"/>
+      <rect x="660" y="492" width="146" height="68" class="dashbox"/>
+      <text x="727" y="504" class="lbl">SEAT SWITCH</text>
+      <text id="capSEAT" x="727" y="515" class="lbl state">(NOT OCCUPIED)</text>
+      <line x1="727" y1="534" x2="727" y2="548" class="dashbox"/>
+    </g>
+
+    <!-- ============ SHORTING CONNECTOR ============ -->
+    <rect x="700" y="570" width="105" height="42" class="dashbox"/>
+    <path d="M730,586 C730,572 770,572 770,586" class="wire" data-net="K2"/>
+    <text x="752" y="624" class="lbl tiny" style="font-size:7.5px">SHORTING CONNECTOR</text>
+
+    <!-- ============ IGNITION UNIT + SPARK ============ -->
+    <rect x="470" y="688" width="115" height="40" class="ink frame"/>
+    <text x="527" y="705" class="lbl">IGNITION</text>
+    <text x="527" y="717" class="lbl">UNIT</text>
+    <g id="plugs">
+      <line x1="642" y1="676" x2="642" y2="688" class="ink" stroke-width="1.8"/>
+      <line x1="654" y1="676" x2="654" y2="688" class="ink" stroke-width="1.8"/>
+      <line x1="654" y1="682" x2="660" y2="682" class="ink"/>
+      <path d="M643,682 l3,-3 l3,4 l3,-3" class="sparkbolt"/>
+      <line x1="642" y1="706" x2="642" y2="718" class="ink" stroke-width="1.8"/>
+      <line x1="654" y1="706" x2="654" y2="718" class="ink" stroke-width="1.8"/>
+      <line x1="654" y1="712" x2="660" y2="712" class="ink"/>
+      <path d="M643,712 l3,-3 l3,4 l3,-3" class="sparkbolt"/>
+    </g>
+    <text x="712" y="676" class="lbl tiny" style="font-size:7.5px">SPARK PLUGS GAP</text>
+    <text x="712" y="686" class="lbl tiny">(2 PLUGS ON TWIN CYL. ENGINES)</text>
+
+    <!-- ============ HOUR METER ============ -->
+    <rect x="470" y="745" width="110" height="35" class="ink frame"/>
+    <text x="525" y="741" class="lbl tiny">(OPTIONAL)</text>
+    <text x="525" y="758" class="lbl">HOUR METER</text>
+    <text id="hourTxt" x="525" y="774" class="lbl mono" style="font-size:9px">0126.4 H</text>
+
+    <!-- ============ POWER OUTLET ============ -->
+    <circle cx="700" cy="790" r="13" class="ink"/>
+    <text id="outTxt" x="700" y="794" class="lbl state">12V</text>
+    <text x="700" y="816" class="lbl tiny" style="font-size:7.5px">POWER OUTLET (OPTIONAL)</text>
+
+    <!-- ============ FUEL SHUT-OFF ============ -->
+    <rect x="418" y="795" width="44" height="23" class="dashbox"/>
+    <path d="M422,803 q5,4 10,0 t10,0 t10,0" class="ink" stroke-width="1"/>
+    <path d="M422,810 q5,4 10,0 t10,0 t10,0" class="ink" stroke-width="1"/>
+    <text x="440" y="791" class="lbl tiny">FUEL LINE</text>
+    <rect x="418" y="820" width="44" height="28" class="ink frame"/>
+    <path d="M424,840 l4,-6 l5,10 l5,-10 l5,10 l5,-10 l5,10 l4,-6" class="ink" stroke-width="1.1"/>
+    <line id="fuelNeedle" x1="440" y1="836" x2="440" y2="824" class="lever"/>
+    <text id="fuelState" x="486" y="835" class="lbl state tas">CLOSED</text>
+    <text x="300" y="856" class="lbl tiny" style="font-size:7.5px">FUEL SHUT-OFF SOLENOID</text>
+    <text x="300" y="866" class="lbl tiny">(IF SO EQUIPPED)</text>
+
+    <!-- ============ DIODE ============ -->
+    <path d="M616,878 L600,885 L616,892 Z" class="ink" fill="#23201a" data-net="ACC"/>
+    <line x1="600" y1="878" x2="600" y2="892" class="ink" stroke-width="2"/>
+    <text x="608" y="906" class="lbl">DIODE</text>
+
+    <!-- ============ ALTERNATOR ============ -->
+    <rect x="652" y="862" width="138" height="70" class="dashbox"/>
+    <path d="M662,885 a8,8 0 0 1 16,0 a8,8 0 0 1 16,0 a8,8 0 0 1 16,0 a8,8 0 0 1 16,0 a8,8 0 0 1 16,0 a8,8 0 0 1 16,0" class="ink" stroke-width="1.5"/>
+    <text x="721" y="925" class="lbl">ALTERNATOR</text>
+    <text x="716" y="845" class="lbl tiny">28 VOLTS AC MIN. @ 3600 RPM</text>
+    <text x="716" y="853" class="lbl tiny">(CHARGING SYSTEM DISCONNECTED)</text>
+    <text x="480" y="868" class="lbl tiny">CHARGING SYSTEM OUTPUT</text>
+    <text x="480" y="876" class="lbl tiny">3 AMP DC @ 3600 RPM</text>
+    <text x="572" y="899" class="lbl tiny">LIGHTING SYSTEM OUTPUT — 5 AMP AC @ 3600 RPM</text>
+    <text x="520" y="952" class="lbl tiny">14 VOLTS AC MIN. @ 3600 RPM (LIGHTS OFF)</text>
+
+    <!-- ============ LIGHT SWITCH (clickable) ============ -->
+    <g id="lightG" class="click">
+      <rect x="420" y="896" width="77" height="34" class="hit"/>
+      <rect x="420" y="896" width="77" height="34" class="dashbox"/>
+      <text x="458" y="890" class="lbl">LIGHT SWITCH</text>
+      <text id="capLIGHT" x="458" y="926" class="lbl state">OFF</text>
+    </g>
+
+    <!-- ============ HEADLIGHTS ============ -->
+    <g id="lampsG">
+      <circle class="lampglow" cx="640" cy="955" r="20" fill="#ffe87a" opacity="0" filter="blur(1px)"/>
+      <circle class="lampglow" cx="700" cy="955" r="20" fill="#ffe87a" opacity="0"/>
+      <circle class="lampface" cx="640" cy="955" r="12" stroke="#23201a" stroke-width="1.5"/>
+      <circle class="lampface" cx="700" cy="955" r="12" stroke="#23201a" stroke-width="1.5"/>
+      <path d="M632,947 l16,16 M648,947 l-16,16" class="ink" stroke-width="1"/>
+      <path d="M692,947 l16,16 M708,947 l-16,16" class="ink" stroke-width="1"/>
+      <text x="670" y="1012" class="lbl">HEADLIGHTS</text>
+    </g>
+
+    <!-- ============ GROUND SYMBOL ============ -->
+    <g class="ink" stroke-width="1.8">
+      <line x1="818" y1="988" x2="842" y2="988"/>
+      <line x1="822" y1="994" x2="838" y2="994"/>
+      <line x1="826" y1="1000" x2="834" y2="1000"/>
+    </g>
+
+    <!-- ============ NOTE BLOCK ============ -->
+    <g id="noteblk"></g>
+
+    <!-- ============ KEY DIAL ============ -->
+    <g id="dial">
+      <circle cx="165" cy="620" r="58" class="ink" stroke-width="1.6"/>
+      <g id="dialTicks" class="ink"></g>
+      <g id="dialKnob">
+        <circle cx="165" cy="620" r="20" class="ink" fill="#efe7cf"/>
+        <rect x="161.5" y="581" width="7" height="44" rx="3" fill="#23201a"/>
+      </g>
+      <text x="165" y="691" class="lbl big">IGNITION SWITCH</text>
+    </g>
+
+    <!-- ============ POSITION TABLE (built by JS) ============ -->
+    <g id="posTable"></g>
+
+    <!-- ============ CONNECTOR GRAPHICS (decorative) ============ -->
+    <g id="connGfx" class="ink" stroke-width="1.1">
+      <rect x="382" y="1048" width="64" height="58" rx="4"/>
+      <circle cx="398" cy="1063" r="5"/><circle cx="430" cy="1063" r="5"/>
+      <circle cx="398" cy="1077" r="5"/><circle cx="430" cy="1077" r="5"/>
+      <circle cx="398" cy="1091" r="5"/><circle cx="430" cy="1091" r="5"/>
+      <rect x="488" y="1048" width="64" height="58" rx="4"/>
+      <rect x="500" y="1058" width="10" height="10"/><rect x="526" y="1058" width="10" height="10"/>
+      <rect x="500" y="1074" width="10" height="10"/><rect x="526" y="1074" width="10" height="10"/>
+      <rect x="500" y="1090" width="10" height="10"/><rect x="526" y="1090" width="10" height="10"/>
+    </g>
+    <text x="414" y="1118" class="lbl tiny">CHASSIS HARNESS</text>
+    <text x="414" y="1127" class="lbl tiny">CONNECTOR (MATING SIDE)</text>
+    <text x="520" y="1118" class="lbl tiny">DASH HARNESS</text>
+    <text x="520" y="1127" class="lbl tiny">CONNECTOR (MATING SIDE)</text>
+
+    <!-- ============ LEGEND ============ -->
+    <g id="legend">
+      <text x="608" y="1030" class="lbl tiny">WIRING INSULATED CLIPS — NOTE: IF REMOVED FOR SERVICING</text>
+      <text x="608" y="1039" class="lbl tiny">OF UNIT, RE-INSTALL TO PROPERLY SECURE YOUR WIRING.</text>
+      <circle cx="620" cy="1056" r="3.4" fill="#23201a"/>
+      <text x="632" y="1059" class="lbl tiny tas" style="font-size:7.5px">NON-REMOVABLE CONNECTIONS</text>
+      <circle cx="620" cy="1072" r="4" class="pin"/>
+      <text x="632" y="1075" class="lbl tiny tas" style="font-size:7.5px">REMOVABLE CONNECTIONS</text>
+      <line x1="612" y1="1090" x2="628" y2="1090" stroke="#e02418" stroke-width="3"/>
+      <text x="632" y="1093" class="lbl tiny tas" style="font-size:7.5px">WIRE HAS BATTERY / ALTERNATOR VOLTAGE</text>
+      <line x1="612" y1="1104" x2="628" y2="1104" stroke="#0c9c44" stroke-width="3"/>
+      <text x="632" y="1107" class="lbl tiny tas" style="font-size:7.5px">WIRE IS GROUNDED (PATH TO CHASSIS / BATTERY −)</text>
+      <line x1="612" y1="1118" x2="628" y2="1118" stroke="#888" stroke-width="3"/>
+      <text x="632" y="1121" class="lbl tiny tas" style="font-size:7.5px">NO VOLTAGE — OPEN / FLOATING</text>
+    </g>
+
+    <g id="contacts"></g>
+  </svg>
+
+  <div class="foot">PAGE 3 · INTERACTIVE RECREATION OF FACTORY SCHEMATIC SCH11 · NOT A SERVICE DOCUMENT</div>
+</div>
+<div id="tooltip"></div>
+
+<script>
+'use strict';
+const SVGNS='http://www.w3.org/2000/svg';
+const svg=document.getElementById('schem');
+
+/* ============================== STATE ============================== */
+const st={
+  key:'OFF',          // OFF | OVERRIDE | RUN | START
+  pedalDown:false,    // clutch/brake pedal (false = pedal up, as drawn)
+  clutchOn:false,     // attachment clutch / blades (false = off, as drawn)
+  inReverse:false,
+  seated:false,       // false = not occupied, as drawn
+  lightsOn:false,
+  fuseBlown:false,
+  engine:'off',       // off | cranking | running
+  crankStart:0
+};
+let solClosed=false;      // solenoid main contacts
+let lastEvent='';         // sticky message (engine died, etc.)
+let hours=126.4, accHot=false;
+
+/* ============================== NETS & SOLVER ============================== */
+const NETS=['BATT','AF','MAIN','ST','S','S2','COIL','ACC','KILL','K2','ROS1','ROS2','ALT_CHG','ALT_L','LFEED','GND','SPARK'];
+const NET_NAME={
+  BATT:'BATTERY + FEED (RED)', AF:'AMMETER → FUSE (RED)', MAIN:'MAIN B+ FEED (RED)',
+  ST:'STARTER FEED (BLACK)', S:'START CIRCUIT — IGNITION "S" (WHITE)', S2:'START CIRCUIT (WHITE)',
+  COIL:'SOLENOID COIL FEED (WHITE)', ACC:'ACCESSORY / A1 CIRCUIT', KILL:'MAGNETO KILL (BLACK/WHITE)',
+  K2:'SEAT SAFETY CIRCUIT — PEDAL KILL RETURN (BLACK)', ROS1:'ROS CIRCUIT — IGNITION "L" → REVERSE SWITCH (BLACK)', ROS2:'SEAT / ROS KILL CIRCUIT — IGNITION "A2" (GRAY)',
+  ALT_CHG:'ALTERNATOR CHARGING OUTPUT', ALT_L:'ALTERNATOR LIGHTING OUTPUT (AC)',
+  LFEED:'HEADLIGHT FEED (BROWN)', GND:'GROUND / CHASSIS (BLACK)', SPARK:'SPARK PLUG LEAD'
+};
+
+function solve(){
+  const p={}; NETS.forEach(n=>p[n]=n);
+  const find=n=>{while(p[n]!==n){p[n]=p[p[n]];n=p[n];}return n;};
+  const u=(a,b)=>{p[find(a)]=find(b);};
+  u('BATT','AF');                                  // ammeter (pass-through)
+  if(!st.fuseBlown) u('AF','MAIN');                // fuse
+  if(st.key==='OFF'){u('KILL','GND');u('ACC','GND');}          // M+G+A1
+  if(st.key==='OVERRIDE'){u('MAIN','ACC');}                    // B+A1
+  if(st.key==='RUN'){u('MAIN','ACC');u('ROS2','ROS1');}        // B+A1, L+A2
+  if(st.key==='START'){u('MAIN','ACC');u('MAIN','S');}         // B+S+A1
+  if(st.pedalDown) u('S','S2'); else u('KILL','K2');           // clutch/brake: start contact / kill contact
+  if(!st.clutchOn) u('S2','COIL'); else u('KILL','ROS2');      // attachment clutch: start contact / kill contact
+  if(st.inReverse) u('ROS1','GND');                            // reverse switch grounds the "L" circuit
+  if(!st.seated){u('ROS2','GND');u('K2','GND');}               // seat switch (both poles closed when empty)
+  if(solClosed) u('MAIN','ST');                                // solenoid main contacts
+  if(st.engine==='running') u('ALT_CHG','ACC');                // diode (conducting)
+  if(st.lightsOn) u('ALT_L','LFEED');                          // light switch
+  const hot=new Set([find('BATT')]);
+  if(st.engine==='running'){hot.add(find('ALT_CHG'));hot.add(find('ALT_L'));}
+  const g=find('GND');
+  const r={};
+  NETS.forEach(n=>{const f=find(n);r[n]={hot:hot.has(f),gnd:f===g};});
+  return r;
+}
+
+/* ============================== WIRE GEOMETRY ============================== */
+const WIRES=[
+ {n:'BATT',p:[[408,97],[120,97],[120,170],[152,170]],lab:['RED',112,140,-90]},
+ {n:'AF',  p:[[178,170],[228,170]]},
+ {n:'MAIN',p:[[272,170],[500,170]],lab:['RED',380,163]},
+ {n:'MAIN',p:[[300,170],[300,252]],lab:['RED',291,215,-90]},
+ {n:'ST',  p:[[580,170],[684,170]],lab:['BLACK',632,163]},
+ {n:'GND', p:[[716,170],[830,170]]},
+ {n:'GND', p:[[456,97],[830,97],[830,988]],lab:['BLACK',650,90]},
+ {n:'GND', p:[[266,334],[266,410],[830,410]],lab:['BLACK',335,404]},
+ {n:'GND', p:[[518,212],[466,212],[466,410]]},
+ {n:'GND', p:[[782,445],[806,445],[806,410]]},
+ {n:'GND', p:[[757,530],[792,530]]},
+ {n:'GND', p:[[757,552],[792,552],[792,445]]},
+ {n:'GND', p:[[770,590],[770,552]]},
+ {n:'GND', p:[[580,762],[830,762]],lab:['BLACK',645,756]},
+ {n:'GND', p:[[713,790],[830,790]],lab:['BLACK',765,784]},
+ {n:'GND', p:[[462,832],[462,858],[830,858]]},
+ {n:'GND', p:[[640,967],[640,985],[830,985]],lab:['BLACK',760,979]},
+ {n:'GND', p:[[700,967],[700,985]]},
+ {n:'S',   p:[[334,266],[360,266],[360,275],[508,275]],lab:['WHITE',430,268]},
+ {n:'S2',  p:[[588,275],[688,275]],lab:['WHITE',638,268]},
+ {n:'COIL',p:[[768,275],[806,275],[806,212],[592,212]],lab:['WHITE',700,205]},
+ {n:'ACC', p:[[336,330],[360,330],[360,885]],lab:['BLACK',352,620,-90]},
+ {n:'ACC', p:[[360,762],[470,762]],lab:['BLUE',410,756]},
+ {n:'ACC', p:[[360,790],[687,790]]},
+ {n:'ACC', p:[[360,832],[418,832]],lab:['BLUE',388,826]},
+ {n:'ACC', p:[[360,885],[600,885]],lab:['RED',560,879]},
+ {n:'ALT_CHG',p:[[616,885],[652,885]]},
+ {n:'ALT_L',p:[[652,912],[482,912]],lab:['ORANGE',565,906]},
+ {n:'LFEED',p:[[435,912],[404,912],[404,935],[700,935]],lab:['BROWN',530,929]},
+ {n:'LFEED',p:[[640,935],[640,943]]},
+ {n:'LFEED',p:[[700,935],[700,943]]},
+ {n:'KILL',p:[[348,300],[430,300],[430,705],[470,705]],lab:['BLACK/WHITE',422,560,-90]},
+ {n:'KILL',p:[[430,390],[640,390],[640,310],[688,310]]},
+ {n:'KILL',p:[[430,355],[508,355]]},
+ {n:'K2',  p:[[588,355],[618,355],[618,590],[730,590]]},
+ {n:'K2',  p:[[618,552],[697,552]]},
+ {n:'ROS1',p:[[300,348],[300,445],[672,445]],lab:['BLACK',400,439]},
+ {n:'ROS2',p:[[318,344],[318,495],[640,495],[640,530],[697,530]],lab:['GRAY',420,489]},
+ {n:'ROS2',p:[[768,310],[812,310],[812,622],[640,622],[640,530]],lab:['GRAY',806,460,-90]},
+ {n:'SPARK',p:[[585,700],[612,700],[612,682],[642,682]]},
+ {n:'SPARK',p:[[585,712],[642,712]]}
+];
+const DOTS=[
+ ['MAIN',300,170],['GND',830,170],['GND',830,410],
+ ['GND',830,762],['GND',830,790],['GND',830,858],['GND',830,985],['GND',700,985],
+ ['GND',466,410],['GND',806,410],['GND',792,445],['GND',792,530],['GND',770,552],
+ ['ACC',360,762],['ACC',360,790],['ACC',360,832],
+ ['KILL',430,390],['KILL',430,355],['K2',618,552],['ROS2',640,530],['LFEED',640,935]
+];
+const OPENPINS=[ // removable connections (open circles on wires)
+ ['MAIN',505,170,5],['ST',575,170,5],
+ ['GND',560,410,4.5],['ROS1',560,445,4.5],['ROS2',560,495,4.5],
+ ['K2',730,590,4],['GND',770,590,4],
+ ['ACC',687,790,3.5],['SPARK',585,700,3],['SPARK',585,712,3],
+ ['ALT_CHG',652,885,3.5],['ALT_L',652,912,3.5]
+];
+
+/* ============================== CONTACTS (lever switches) ============================== */
+const CONTACTS=[
+ {id:'cbStart',a:[508,275],b:[588,275],closed:()=>st.pedalDown,nets:['S','S2']},
+ {id:'cbKill', a:[588,355],b:[508,355],closed:()=>!st.pedalDown,nets:['K2','KILL']},
+ {id:'acStart',a:[688,275],b:[768,275],closed:()=>!st.clutchOn,nets:['S2','COIL']},
+ {id:'acKill', a:[688,310],b:[768,310],closed:()=>st.clutchOn,nets:['KILL','ROS2']},
+ {id:'rev',    a:[672,445],b:[782,445],closed:()=>st.inReverse,nets:['ROS1','GND']},
+ {id:'seatT',  a:[697,530],b:[757,530],closed:()=>!st.seated,nets:['ROS2','GND']},
+ {id:'seatB',  a:[697,552],b:[757,552],closed:()=>!st.seated,nets:['K2','GND']},
+ {id:'light',  a:[435,912],b:[482,912],closed:()=>st.lightsOn,nets:['LFEED','ALT_L']}
+];
+
+/* ============================== BUILD SVG ============================== */
+function el(tag,attrs,parent){
+  const e=document.createElementNS(SVGNS,tag);
+  for(const k in attrs)e.setAttribute(k,attrs[k]);
+  (parent||svg).appendChild(e);return e;
+}
+function pathD(pts){return pts.map((q,i)=>(i?'L':'M')+q[0]+','+q[1]).join(' ');}
+
+const gW=document.getElementById('wires'),gD=document.getElementById('dots'),
+      gP=document.getElementById('pins'),gL=document.getElementById('wlabels'),
+      gC=document.getElementById('contacts');
+
+WIRES.forEach(w=>{
+  el('path',{d:pathD(w.p),'class':'wire','data-net':w.n},gW);
+  el('path',{d:pathD(w.p),'class':'wirehit','data-net':w.n},gW);
+  if(w.lab){
+    const[t,x,y,rot]=w.lab;
+    const a={x:x,y:y,'class':'colorlbl'};
+    if(rot)a.transform=`rotate(${rot},${x},${y})`;
+    el('text',a,gL).textContent=t;
+  }
+});
+DOTS.forEach(d=>el('circle',{cx:d[1],cy:d[2],r:3.2,'class':'dot','data-net':d[0]},gD));
+OPENPINS.forEach(d=>el('circle',{cx:d[1],cy:d[2],r:d[3],'class':'pin','data-net':d[0]},gP));
+
+CONTACTS.forEach(c=>{
+  el('circle',{cx:c.a[0],cy:c.a[1],r:3.5,'class':'pin','data-net':c.nets[0],id:c.id+'_pa'},gC);
+  el('circle',{cx:c.b[0],cy:c.b[1],r:3.5,'class':'pin','data-net':c.nets[1],id:c.id+'_pb'},gC);
+  const dx=c.b[0]-c.a[0], sign=dx>0?-1:1; // lift lever up away from terminal row
+  const lever=el('line',{x1:c.a[0]+(dx>0?4:-4),y1:c.a[1],x2:c.b[0]+(dx>0?-4:4),y2:c.b[1],'class':'lever',id:c.id+'_lv'},gC);
+  lever.style.transformOrigin=c.a[0]+'px '+c.a[1]+'px';
+  c._lv=lever; c._openRot='rotate('+(sign*26)+'deg)';
+});
+
+/* ignition terminals */
+const TERM={B:[300,252],S:[334,266],M:[348,300],A1:[336,330],A2:[318,344],L:[300,348],G:[266,334]};
+const TERMNET={B:'MAIN',S:'S',M:'KILL',A1:'ACC',A2:'ROS2',L:'ROS1',G:'GND'};
+for(const t in TERM) el('circle',{cx:TERM[t][0],cy:TERM[t][1],r:4,'class':'pin','data-net':TERMNET[t],id:'term_'+t},gP);
+const KEYGROUPS={OFF:[['M','G','A1']],OVERRIDE:[['B','A1']],RUN:[['B','A1'],['L','A2']],START:[['B','S','A1']]};
+
+/* NOTE text block */
+(function(){
+  const lines=['NOTE','YOUR TRACTOR IS EQUIPPED','WITH A SPECIAL ALTERNATOR','SYSTEM. THE LIGHTS ARE NOT',
+   'CONNECTED TO THE BATTERY,','BUT HAVE THEIR OWN','ELECTRICAL SOURCE. THE','BRIGHTNESS OF THE LIGHTS',
+   'WILL CHANGE WITH ENGINE','SPEED. AT IDLE THE LIGHTS','WILL DIM. AS THE ENGINE IS','SPEEDED UP, THE LIGHTS','WILL BECOME THEIR BRIGHTEST.'];
+  const g=document.getElementById('noteblk');
+  lines.forEach((t,i)=>{
+    const e=el('text',{x:62,y:900+i*12,'class':'lbl tiny tas','font-size':i?8:9},g);
+    if(!i)e.setAttribute('font-weight','600');
+    e.textContent=t;
+  });
+})();
+
+/* key dial */
+const DIAL={OFF:-60,OVERRIDE:-20,RUN:20,START:60};
+const DIALLBL={OFF:['OFF'],OVERRIDE:['RUN /','OVERRIDE'],RUN:['RUN'],START:['START']};
+(function(){
+  const g=document.getElementById('dialTicks');
+  for(const k in DIAL){
+    const a=DIAL[k]*Math.PI/180;
+    const sx=165+48*Math.sin(a), sy=620-48*Math.cos(a), ex=165+58*Math.sin(a), ey=620-58*Math.cos(a);
+    el('line',{x1:sx,y1:sy,x2:ex,y2:ey,'class':'ink','stroke-width':2},g);
+    const lx=165+78*Math.sin(a), ly=620-78*Math.cos(a);
+    const btn=el('g',{'class':'dialbtn',id:'dial_'+k},document.getElementById('dial'));
+    el('circle',{cx:lx,cy:ly,r:17},btn);
+    DIALLBL[k].forEach((t,i)=>{
+      const tx=el('text',{x:lx,y:ly+3+(i-(DIALLBL[k].length-1)/2)*9,'class':'lbl state'},btn);
+      tx.textContent=t;
+    });
+    btn.addEventListener('pointerdown',ev=>{ev.preventDefault();setKey(k);});
+  }
+})();
+
+/* position table */
+const ROWS=[['OFF','M+G+A1',''],['RUN/OVERRIDE','B+A1',''],['RUN','B+A1','L+A2'],['START','B+S+A1','']];
+const ROWKEY=['OFF','OVERRIDE','RUN','START'];
+(function(){
+  const g=document.getElementById('posTable');
+  const x=[60,150,237,330], y0=707, rh=17;
+  const hdr=['POSITION','CIRCUIT','"MAKE"'];
+  el('rect',{x:60,y:y0,width:270,height:rh,fill:'#23201a'},g);
+  hdr.forEach((h,i)=>{const t=el('text',{x:(x[i]+x[i+1])/2,y:y0+12,'class':'lbl tiny',fill:'#faf7ee','font-size':8},g);t.textContent=h;});
+  ROWS.forEach((row,ri)=>{
+    const ry=y0+rh*(ri+1);
+    const grp=el('g',{'class':'posrow',id:'row_'+ROWKEY[ri]},g);
+    el('rect',{x:60,y:ry,width:270,height:rh,fill:'#faf7ee',id:'rowbg_'+ROWKEY[ri]},grp);
+    row.forEach((c,ci)=>{const t=el('text',{x:(x[ci]+x[ci+1])/2,y:ry+12,'class':'lbl tiny','font-size':8.5},grp);t.textContent=c;});
+    grp.addEventListener('pointerdown',ev=>{ev.preventDefault();setKey(ROWKEY[ri]);});
+  });
+  for(let i=0;i<=ROWS.length+1;i++) el('line',{x1:60,y1:y0+rh*i,x2:330,y2:y0+rh*i,'class':'ink','stroke-width':.8},g);
+  x.forEach(xx=>el('line',{x1:xx,y1:y0,x2:xx,y2:y0+rh*5,'class':'ink','stroke-width':.8},g));
+})();
+
+/* ============================== INTERACTION ============================== */
+function poke(fn){lastEvent='';fn();update();}
+document.getElementById('fuseG').addEventListener('pointerdown',()=>poke(()=>st.fuseBlown=!st.fuseBlown));
+document.getElementById('cbG').addEventListener('pointerdown',()=>poke(()=>st.pedalDown=!st.pedalDown));
+document.getElementById('acG').addEventListener('pointerdown',()=>poke(()=>st.clutchOn=!st.clutchOn));
+document.getElementById('revG').addEventListener('pointerdown',()=>poke(()=>st.inReverse=!st.inReverse));
+document.getElementById('seatG').addEventListener('pointerdown',()=>poke(()=>st.seated=!st.seated));
+document.getElementById('lightG').addEventListener('pointerdown',()=>poke(()=>st.lightsOn=!st.lightsOn));
+
+function setKey(k){lastEvent='';st.key=k;update();}
+
+/* tooltip */
+const tip=document.getElementById('tooltip');
+let lastR=null;
+svg.addEventListener('pointermove',e=>{
+  const t=e.target.closest('[data-net]');
+  if(!t||!lastR){tip.style.display='none';return;}
+  const n=t.getAttribute('data-net');
+  tip.innerHTML='<b>'+NET_NAME[n]+'</b><br>'+voltage(n);
+  tip.style.display='block';
+  tip.style.left=Math.min(e.clientX+14,window.innerWidth-310)+'px';
+  tip.style.top=(e.clientY+16)+'px';
+});
+svg.addEventListener('pointerleave',()=>tip.style.display='none');
+
+function voltage(n){
+  const s=lastR[n];
+  if(n==='SPARK')return st.engine==='running'?'FIRING — MAGNETO LIVE':'NO SPARK';
+  if(s.hot&&s.gnd)return 'FAULT — SHORT TO GROUND';
+  if(s.hot){
+    if(n==='ALT_L'||n==='LFEED')return '≈14 VAC (RISES WITH ENGINE SPEED)';
+    return st.engine==='running'?'+13.8 V (ALTERNATOR CHARGING)':'+12.6 V (BATTERY)';
+  }
+  if(s.gnd)return n==='KILL'?'0 V — GROUNDED → SPARK KILLED':'0 V — PATH TO GROUND';
+  if(n==='KILL')return st.engine==='running'?'FLOATING — NOT GROUNDED (RUN ENABLED)':'FLOATING — NOT GROUNDED';
+  return 'NO VOLTAGE — OPEN CIRCUIT';
+}
+
+/* ============================== ENGINE LOGIC + RENDER ============================== */
+function whyDied(r){
+  if(st.key==='OFF')return 'ENGINE KILLED — KEY OFF: M+G GROUNDS THE MAGNETO.';
+  if(!st.seated&&st.clutchOn)return 'ENGINE KILLED — OPERATOR OFF SEAT WITH BLADES ENGAGED → MAGNETO GROUNDED.';
+  if(!st.seated&&!st.pedalDown)return 'ENGINE KILLED — OPERATOR OFF SEAT, PEDAL UP → MAGNETO GROUNDED.';
+  if(st.clutchOn&&st.inReverse&&st.key==='RUN')return 'ROS KILL — REVERSE WITH BLADES ENGAGED (USE RUN/OVERRIDE TO MOW IN REVERSE).';
+  if(!r.ACC.hot)return 'ENGINE STALLED — FUEL SHUT-OFF SOLENOID LOST POWER.';
+  return 'ENGINE STOPPED.';
+}
+
+function update(){
+  let r=solve(); solClosed=r.COIL.hot; r=solve();
+  if(st.engine!=='running'){
+    if(r.ST.hot){
+      if(st.engine!=='cranking'){st.engine='cranking';st.crankStart=Date.now();}
+      else if(Date.now()-st.crankStart>800&&!r.KILL.gnd&&r.ACC.hot){st.engine='running';lastEvent='';r=solve();}
+    }else if(st.engine==='cranking'){st.engine='off';}
+  }
+  if(st.engine==='running'){
+    r=solve();
+    if(r.KILL.gnd||!r.ACC.hot){lastEvent=whyDied(r);st.engine='off';solClosed=solve().COIL.hot;r=solve();}
+  }
+  render(r);
+}
+
+function clsFor(s){return s.hot&&s.gnd?'fault':s.hot?'hot':s.gnd?'gnd':'';}
+
+function render(r){
+  lastR=r;
+  document.querySelectorAll('#schem [data-net]').forEach(e2=>{
+    if(e2.classList.contains('wirehit'))return;
+    const base=e2.getAttribute('class').replace(/\s*(hot|gnd|fault)\b/g,'');
+    const c=clsFor(r[e2.getAttribute('data-net')]);
+    e2.setAttribute('class',base+(c?' '+c:''));
+  });
+  /* contacts */
+  CONTACTS.forEach(c=>{
+    const closed=c.closed();
+    c._lv.style.transform=closed?'rotate(0deg)':c._openRot;
+    const s=r[c.nets[0]];
+    const cc=clsFor(s);
+    c._lv.setAttribute('class','lever'+(cc?' '+cc:''));
+  });
+  /* fuse glyph */
+  document.getElementById('fuseWave').style.display=st.fuseBlown?'none':'';
+  document.getElementById('fuseBroken').style.display=st.fuseBlown?'':'none';
+  document.getElementById('subFuse').textContent=st.fuseBlown?'✕ BLOWN — CLICK TO REPLACE':'OK — CLICK TO BLOW';
+  document.getElementById('subFuse').setAttribute('fill',st.fuseBlown?'#e02418':'#23201a');
+  /* solenoid plunger */
+  document.getElementById('solPlunger').classList.toggle('closed',solClosed);
+  /* engine visuals */
+  svg.classList.toggle('crank',r.ST.hot);
+  svg.classList.toggle('running',st.engine==='running');
+  document.getElementById('lampsG').classList.toggle('lamps-on',r.LFEED.hot);
+  /* fuel solenoid */
+  accHot=r.ACC.hot;
+  document.getElementById('fuelNeedle').classList.toggle('open',accHot);
+  const fs=document.getElementById('fuelState');
+  fs.textContent=accHot?'OPEN':'CLOSED'; fs.setAttribute('fill',accHot?'#0c9c44':'#23201a');
+  document.getElementById('outTxt').setAttribute('fill',accHot?'#e02418':'#23201a');
+  /* ignition internal links */
+  const g=document.getElementById('ignLinks');g.innerHTML='';
+  KEYGROUPS[st.key].forEach(grp=>{
+    const pts=grp.map(t=>{const[tx,ty]=TERM[t];return[300+(tx-300)*.68,300+(ty-300)*.68];});
+    const cx=pts.reduce((a,q)=>a+q[0],0)/pts.length, cy=pts.reduce((a,q)=>a+q[1],0)/pts.length;
+    const cc=clsFor(r[TERMNET[grp[0]]]);
+    grp.forEach((t,i)=>{
+      const[tx,ty]=TERM[t];
+      el('line',{x1:TERM[t][0],y1:TERM[t][1],x2:pts[i][0],y2:pts[i][1],'class':'link '+cc},g);
+      el('line',{x1:pts[i][0],y1:pts[i][1],x2:cx,y2:cy,'class':'link '+cc},g);
+    });
+  });
+  /* captions */
+  document.getElementById('capCB').textContent=st.pedalDown?'(PEDAL DEPRESSED)':'(PEDAL UP)';
+  document.getElementById('capAC').textContent=st.clutchOn?'(CLUTCH ON — BLADES)':'(CLUTCH OFF)';
+  document.getElementById('capREV').textContent=st.inReverse?'(IN REVERSE)':'(NOT IN REVERSE)';
+  document.getElementById('capSEAT').textContent=st.seated?'(OCCUPIED)':'(NOT OCCUPIED)';
+  document.getElementById('capLIGHT').textContent=st.lightsOn?'ON':'OFF';
+  /* dial + table */
+  document.getElementById('dialKnob').style.transform='rotate('+DIAL[st.key]+'deg)';
+  document.getElementById('dialKnob').style.transformOrigin='165px 620px';
+  ROWKEY.forEach(k=>document.getElementById('rowbg_'+k).setAttribute('fill',k===st.key?'#f3d98e':'#faf7ee'));
+  /* status bar */
+  const pill=document.getElementById('engPill');
+  pill.className=st.engine==='running'?'e-run':st.engine==='cranking'?'e-crank':'';
+  pill.id='engPill';
+  pill.textContent=st.engine==='running'?'ENGINE RUNNING':st.engine==='cranking'?'CRANKING':'ENGINE OFF';
+  document.getElementById('msg').textContent=statusMsg(r);
+}
+
+function statusMsg(r){
+  if(lastEvent)return lastEvent;
+  if(st.engine==='running'){
+    if(st.key==='START')return 'RUNNING — KEY STILL IN START: STARTER REMAINS ENGAGED. CLICK RUN.';
+    if(st.clutchOn&&st.inReverse&&st.key==='OVERRIDE')return 'RUNNING — ROS OVERRIDE ACTIVE: REVERSE WITH BLADES PERMITTED.';
+    let m='RUNNING — MAGNETO LIVE, ALTERNATOR CHARGING VIA DIODE.';
+    if(st.lightsOn)m+=' HEADLIGHTS ON (ALTERNATOR AC).';
+    return m;
+  }
+  if(st.key==='START'){
+    if(st.fuseBlown)return 'NO CRANK — FUSE BLOWN: NO POWER TO B TERMINAL.';
+    if(!st.pedalDown)return 'NO CRANK — CLUTCH/BRAKE PEDAL MUST BE DEPRESSED (START INTERLOCK OPEN).';
+    if(st.clutchOn)return 'NO CRANK — ATTACHMENT CLUTCH MUST BE OFF (START INTERLOCK OPEN).';
+    return 'CRANKING — SOLENOID ENERGIZED, STARTER ENGAGED…';
+  }
+  if(st.key==='OFF')return 'KEY OFF — MAGNETO GROUNDED THROUGH M+G. ENGINE CANNOT RUN.';
+  if(r.KILL.gnd)return 'KEY '+(st.key==='OVERRIDE'?'RUN/OVERRIDE':st.key)+' — MAGNETO IS GROUNDED (SEE GREEN KILL PATH): ENGINE WOULD NOT STAY RUNNING.';
+  return 'KEY '+(st.key==='OVERRIDE'?'RUN/OVERRIDE':st.key)+' — MAGNETO FLOATING: READY. CLICK START (PEDAL DOWN, BLADES OFF) TO CRANK.';
+}
+
+/* optional preset state via URL hash, e.g. #key=RUN&seated=1&lights=1&run=1 */
+(function(){
+  if(!location.hash)return;
+  const q=new URLSearchParams(location.hash.slice(1));
+  if(q.get('key'))st.key=q.get('key').toUpperCase();
+  if(q.has('pedal'))st.pedalDown=q.get('pedal')==='1';
+  if(q.has('clutch'))st.clutchOn=q.get('clutch')==='1';
+  if(q.has('rev'))st.inReverse=q.get('rev')==='1';
+  if(q.has('seated'))st.seated=q.get('seated')==='1';
+  if(q.has('lights'))st.lightsOn=q.get('lights')==='1';
+  if(q.has('fuse'))st.fuseBlown=q.get('fuse')==='1';
+  if(q.get('run')==='1')st.engine='running';
+})();
+/* hour meter */
+setInterval(()=>{if(accHot){hours+=0.1;document.getElementById('hourTxt').textContent=hours.toFixed(1).padStart(6,'0')+' H';}},1000);
+/* engine tick (crank catch progression) */
+setInterval(update,200);
+update();
+</script>
+</body>
+</html>
