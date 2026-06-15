@@ -1,1 +1,1 @@
-Access live here: https://github.com/jgrimard/mower_schematic/deployments/github-pages
+Access live here: https://jgrimard.github.io/mower_schematic/
